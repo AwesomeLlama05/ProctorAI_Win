@@ -1,4 +1,3 @@
-
 import base64
 import os
 from openai import OpenAI
@@ -344,6 +343,7 @@ class OLlamaModel(Model):
             print(f"Error decoding JSON: {e}")
             return None  # Return None or handle the error as needed
 
+        print(data)
         response_string = data["message"]["content"]
         assert response_string is not None, "Make sure OLlama is turned on!"
         return response_string

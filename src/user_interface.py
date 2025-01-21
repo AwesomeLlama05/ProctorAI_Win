@@ -182,7 +182,7 @@ class ProcrastinationApp(QWidget):
             }
         """)
         
-        self.start_button = QPushButton('Start (⌘⏎)', self)
+        self.start_button = QPushButton('Start (Ctrl⏎)', self)
         self.start_button.clicked.connect(self.start_task)
         self.start_button.setStyleSheet("""
             QPushButton {
@@ -206,7 +206,7 @@ class ProcrastinationApp(QWidget):
         shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
         shortcut.activated.connect(self.start_button.click)
         
-        self.settings_button = QPushButton('Settings (⌘S)', self)
+        self.settings_button = QPushButton('Settings (🪟S)', self)
         self.settings_button.clicked.connect(self.open_settings)
         # setting geometry of button
         self.settings_button.setGeometry(200, 150, 100, 100)
@@ -285,10 +285,10 @@ class ProcrastinationApp(QWidget):
             }
         """)
         
-        self.input_area = QLineEdit(self)
+        self.input_area = QTextEdit(self)
         self.input_area.setFont(QFont('Courier New', 16))
         self.input_area.setStyleSheet("""
-            QLineEdit {
+            QTextEdit {
                 background-color: white;
                 color: black;
                 border: 1px solid #ccc;
@@ -296,7 +296,6 @@ class ProcrastinationApp(QWidget):
                 padding: 5px;
             }
         """)
-        self.input_area.returnPressed.connect(self.send_message)
         
         self.send_button = QPushButton('Send', self)
         self.send_button.clicked.connect(self.send_message)
@@ -458,7 +457,7 @@ class ProcrastinationApp(QWidget):
         self.chat_button.show()
         
     def send_message(self):
-        user_message = self.input_area.text()
+        user_message = self.input_area.toPlainText()
         if user_message:
             self.chat_area.append(f"You: {user_message}")
             self.input_area.clear()
