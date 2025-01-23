@@ -60,7 +60,7 @@ class SettingsDialog(QDialog):
 
         # user_name flag
         self.user_name_lineedit = QLineEdit()
-        self.user_name_lineedit.setText("Procrastinator")
+        self.user_name_lineedit.setText("Ada")
         self.layout.addRow("User Name", self.user_name_lineedit)
 
         # print_CoT flag
@@ -405,7 +405,7 @@ class ProcrastinationApp(QWidget):
         elif "procrastinating" in output.lower() and api_name_to_colloquial[self.settings["model"]] in output:
             format.setForeground(QColor("red"))
         else:
-            format.setForeground(QColor("green"))
+            format.setForeground(QColor("blue"))
         
         cursor.insertText(timestamped_output, format)
         self.output_display.setTextCursor(cursor)
