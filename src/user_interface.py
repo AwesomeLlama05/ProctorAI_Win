@@ -126,7 +126,7 @@ class ProcrastinationApp(QWidget):
         pretitle = 'Welcome to ProctorAI👁️'
         title = 'What are you looking to get done today?'
         subtitle_1 = 'What behaviors do you want me to allow?'
-        subtitle_2 = 'What behaviors do you want me to call you out on?'
+        subtitle_2 = 'Testing for windows version'
         subtitle_3 = "You've got this"
         subtitle_4 = "And if you dare to procrastinate, I will make you pay the price ;)"
         self.prompt_label = QLabel(self)
@@ -206,7 +206,7 @@ class ProcrastinationApp(QWidget):
         shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
         shortcut.activated.connect(self.start_button.click)
         
-        self.settings_button = QPushButton('Settings (🪟S)', self)
+        self.settings_button = QPushButton('Settings (Win+S)', self)
         self.settings_button.clicked.connect(self.open_settings)
         # setting geometry of button
         self.settings_button.setGeometry(200, 150, 100, 100)
@@ -368,7 +368,7 @@ class ProcrastinationApp(QWidget):
             self.process.setProcessChannelMode(QProcess.MergedChannels)
             self.process.readyReadStandardOutput.connect(self.handle_stdout)
             self.process.start()
-            self.process.write(task_description.encode() + b'\n')
+            self.process.write(task_description.encode())
             self.process.closeWriteChannel()
 
             if self.start_time is None:
@@ -405,7 +405,7 @@ class ProcrastinationApp(QWidget):
         elif "procrastinating" in output.lower() and api_name_to_colloquial[self.settings["model"]] in output:
             format.setForeground(QColor("red"))
         else:
-            format.setForeground(QColor("blue"))
+            format.setForeground(QColor("green"))
         
         cursor.insertText(timestamped_output, format)
         self.output_display.setTextCursor(cursor)

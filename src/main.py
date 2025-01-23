@@ -1,4 +1,5 @@
 import time
+import sys
 import os
 import yaml
 import threading
@@ -191,7 +192,7 @@ def main(
     if cli_mode:
         user_spec = input("What do you plan to work on?\n")
     else:
-        user_spec = input()
+        user_spec = sys.stdin.read() # read until EOF
 
     proctor_model = create_model(model_name)
 
