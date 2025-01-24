@@ -206,7 +206,7 @@ class ProcrastinationApp(QWidget):
         shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
         shortcut.activated.connect(self.start_button.click)
         
-        self.settings_button = QPushButton('Settings (Win+S)', self)
+        self.settings_button = QPushButton('Settings (Ctrl+S)', self)
         self.settings_button.clicked.connect(self.open_settings)
         # setting geometry of button
         self.settings_button.setGeometry(200, 150, 100, 100)

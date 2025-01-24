@@ -28,7 +28,6 @@ def model_pipeline(
     image_filepaths: list,
     print_CoT=False,
 ):
-    print(f"Debug: user_prompt sent to model: {user_prompt}")  # debug
 
     # goes from model to determination of "productive" or "procrastinating"
     response = model.call_model(
