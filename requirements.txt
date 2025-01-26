@@ -99,3 +99,6 @@ PyQt5-Qt5
 PyQt5-sip
 screeninfo
 python-dotenv
+fastapi==0.109.2
+uvicorn==0.27.1
+python-multipart==0.0.7

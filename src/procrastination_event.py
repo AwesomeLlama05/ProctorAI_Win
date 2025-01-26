@@ -1,87 +1,102 @@
-import tkinter as tk
-from tkinter import messagebox
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QVBoxLayout, QLineEdit, QMessageBox, QMainWindow
+from PyQt5.QtCore import Qt, QTimer
+import sys
 
 
 class ProcrastinationEvent:
     def show_popup(self, ai_message, pledge_message):
-        root = tk.Tk()
-        app = FocusPopup(root, ai_message, pledge_message)
-        root.mainloop()
+        app = QApplication(sys.argv)
+        window = FocusPopup(ai_message, pledge_message)
+        window.show()
+        sys.exit(app.exec_())
 
     def play_countdown(self, count, brief_message="You have 10 seconds to close it."):
-        root = tk.Tk()
-        root.title(brief_message)
-
-        # Make the window stay on top
-        root.attributes('-topmost', True)
-
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-
-        window_width = 400
-        window_height = 100
-
-        position_top = int(screen_height / 2 - window_height / 2)
-        position_right = int(screen_width / 2 - window_width / 2)
-
-        root.geometry(f'{window_width}x{window_height}+{position_right}+{position_top}')
-
-        label = tk.Label(root, font=('Helvetica', 48), fg='red')
-        label.pack(expand=True)
-
-        def countdown(start_count):
-            label['text'] = start_count
-            if start_count > 0:
-                root.after(1000, countdown, start_count - 1)
-
-        countdown(count)
-        root.mainloop()
+        app = QApplication(sys.argv)
+        window = CountdownWindow(count, brief_message)
+        window.show()
+        sys.exit(app.exec_())
 
 
-class FocusPopup:
-    def __init__(self, master, ai_message, pledge_message):
-        self.master = master
-        self.master.title("Focus Reminder")
-        self.master.attributes('-fullscreen', True)
-        self.master.configure(bg='white')
+class FocusPopup(QMainWindow):
+    def __init__(self, ai_message, pledge_message):
+        super().__init__()
+        self.setWindowTitle("Focus Reminder")
+        self.showFullScreen()
+        self.setStyleSheet("background-color: white;")
+
+        layout = QVBoxLayout()
 
         # AI personalized message at the top with wrapping
-        self.ai_message_label = tk.Label(
-            master,
-            text=ai_message,
-            font=("Helvetica", 24),
-            bg='white',
-            fg='black',
-            wraplength=self.master.winfo_screenwidth() - 100  # Wrap text to fit the screen width with padding
-        )
-        self.ai_message_label.pack(pady=50, side=tk.TOP)
+        self.ai_message_label = QLabel(ai_message)
+        self.ai_message_label.setStyleSheet("font-size: 24px; color: black;")
+        self.ai_message_label.setWordWrap(True)
+        layout.addWidget(self.ai_message_label, alignment=Qt.AlignTop)
 
-        
         # Pledge message and entry at the bottom
-        self.bottom_frame = tk.Frame(master, bg='white')
-        self.bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=50)
-
-        self.label = tk.Label(self.bottom_frame, text="Please type the following to continue working:", font=("Helvetica", 18), bg='white', fg='black')
-        self.label.pack(pady=10)
-
         self.challenge_text = pledge_message.strip()
-        self.challenge_label = tk.Label(self.bottom_frame, text=self.challenge_text, font=("Helvetica", 16), bg='white', fg='black')
-        self.challenge_label.pack(pady=10)
 
-        self.entry = tk.Entry(self.bottom_frame, font=("Helvetica", 16), width=50)
-        self.entry.pack(pady=10)
-        self.entry.bind('<Return>', self.check_input)
+        self.label = QLabel("Please type the following to continue working:")
+        self.label.setStyleSheet("font-size: 18px; color: black;")
+        layout.addWidget(self.label)
 
-        self.result_label = tk.Label(self.bottom_frame, text="", font=("Helvetica", 16), bg='white', fg='black')
-        self.result_label.pack(pady=10)
+        self.challenge_label = QLabel(self.challenge_text)
+        self.challenge_label.setStyleSheet("font-size: 16px; color: black;")
+        layout.addWidget(self.challenge_label)
 
-    def check_input(self, event):
-        user_input = self.entry.get()
+        self.entry = QLineEdit()
+        self.entry.setStyleSheet("font-size: 16px;")
+        self.entry.returnPressed.connect(self.check_input)
+        layout.addWidget(self.entry)
+
+        self.result_label = QLabel("")
+        self.result_label.setStyleSheet("font-size: 16px; color: black;")
+        layout.addWidget(self.result_label)
+
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+
+    def check_input(self):
+        user_input = self.entry.text()
         if user_input == self.challenge_text:
-            self.master.destroy()  # Ends the mainloop
+            self.close()
         else:
-            self.result_label.config(text="Incorrect input. Please try again.", fg='red')
-            self.entry.delete(0, tk.END)
+            self.result_label.setText("Incorrect input. Please try again.")
+            self.result_label.setStyleSheet("color: red;")
+            self.entry.clear()
+
+
+class CountdownWindow(QMainWindow):
+    def __init__(self, count, brief_message):
+        super().__init__()
+        self.setWindowTitle(brief_message)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
+
+        screen = QApplication.primaryScreen().geometry()
+        window_width = 400
+        window_height = 100
+        position_top = int(screen.height() / 2 - window_height / 2)
+        position_right = int(screen.width() / 2 - window_width / 2)
+        self.setGeometry(position_right, position_top, window_width, window_height)
+
+        self.label = QLabel("", self)
+        self.label.setStyleSheet("font-size: 48px; color: red;")
+        self.label.setAlignment(Qt.AlignCenter)
+        self.setCentralWidget(self.label)
+
+        self.count = count
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_countdown)
+        self.timer.start(1000)
+        self.update_countdown()
+
+    def update_countdown(self):
+        self.label.setText(str(self.count))
+        if self.count > 0:
+            self.count -= 1
+        else:
+            self.timer.stop()
+            self.close()
 
 
 if __name__ == "__main__":
