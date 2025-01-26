@@ -1,33 +1,18 @@
 import base64
 import os
+from openai import OpenAI
+import tiktoken
 from PIL import Image
+import google.generativeai as genai
+import anthropic
 import subprocess
 import json
 from abc import ABC, abstractmethod
 from functools import partial
 
-try:
-    import tiktoken
-except ImportError:
-    TIKTOKEN_AVAILABLE = False
-
-try:
-    from openai import OpenAI
-    openai_api_key = os.environ.get('OPENAI_API_KEY')
-except ImportError:
-    OPENAI_AVAILABLE = False
-
-try:
-    import anthropic
-    anthropic_api_key = os.environ.get('ANTHROPIC_API_KEY')
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
-
-try:
-    import google.generativeai as genai
-    gemini_api_key = os.environ.get('GEMINI_API_KEY')
-except ImportError:
-    GEMINI_AVAILABLE = False
+anthropic_api_key = os.environ.get('ANTHROPIC_API_KEY')
+openai_api_key = os.environ.get('OPENAI_API_KEY')
+gemini_api_key = os.environ.get('GEMINI_API_KEY')
 
 class Conversation(ABC):
     @abstractmethod
@@ -122,18 +107,14 @@ class Model(ABC):
 
 def create_model(model_name):
     if model_name == "gpt-4o":
-        if not OPENAI_AVAILABLE:
-            raise ImportError("OpenAI package not installed")
         return GPTModel(model_name)
     elif model_name == "gemini-1.5-flash":
-        if not GEMINI_AVAILABLE:
-            raise ImportError("Google Generative AI package not installed")
         return GeminiModel(model_name)
     elif model_name == "claude-3-5-sonnet-20240620":
-        if not ANTHROPIC_AVAILABLE:
-            raise ImportError("Anthropic package not installed")
         return ClaudeModel(model_name)
-    elif model_name == "llava:34b" or model_name == "llava":
+    elif model_name == "llava:34b":
+        return OLlamaModel(model_name)
+    elif model_name == "llava":
         return OLlamaModel(model_name)
     else:
         raise NotImplementedError("Model not supported.")
@@ -175,62 +156,59 @@ class GPTModel(Model):
         return response_string
     
     def count_tokens(self, system_prompt, user_prompt, assistant_response, image_paths=None):
-        if not TIKTOKEN_AVAILABLE:
-            return None
-            
-        try:
-            encoder = tiktoken.encoding_for_model(self.model_name)
-            
-            image_token_count = 0
-            if image_paths is not None:
-                image_tiles = []
-                for image_path in image_paths:
-                    width, height = self.get_image_dimensions(image_path)
-                    num_w_tiles = width // 512
-                    num_w_tiles = num_w_tiles + 1 if width % 512 != 0 else num_w_tiles
-                    num_h_tiles = height // 512
-                    num_h_tiles = num_h_tiles + 1 if height % 512 != 0 else num_h_tiles
-                    num_tiles = num_w_tiles*num_h_tiles
-                    if num_tiles > 4:
-                        num_tiles = 4
-                    image_tiles.append(num_tiles)
+        encoder = tiktoken.encoding_for_model(self.model_name)
+        
+        image_token_count = 0
+        if image_paths is not None:
+            image_tiles = []
+            for image_path in image_paths:
+                width, height = self.get_image_dimensions(image_path)
+                num_w_tiles = width // 512
+                num_w_tiles = num_w_tiles + 1 if width % 512 != 0 else num_w_tiles
+                num_h_tiles = height // 512
+                num_h_tiles = num_h_tiles + 1 if height % 512 != 0 else num_h_tiles
+                num_tiles = num_w_tiles*num_h_tiles
+                if num_tiles > 4:
+                    num_tiles = 4
+                image_tiles.append(num_tiles)
 
-                tokens_per_tile = 170
-                image_token_count = sum([num_tiles * tokens_per_tile for num_tiles in image_tiles])
+            tokens_per_tile = 170
 
-            system_tokens = encoder.encode(system_prompt)
-            user_tokens = encoder.encode(user_prompt)
-            assistant_tokens = encoder.encode(assistant_response)
+            image_token_count = sum([num_tiles * tokens_per_tile for num_tiles in image_tiles])
 
-            system_token_count = len(system_tokens)
-            user_token_count = len(user_tokens)
-            assistant_token_count = len(assistant_tokens)
+        system_tokens = encoder.encode(system_prompt)
+        user_tokens = encoder.encode(user_prompt)
+        assistant_tokens = encoder.encode(assistant_response)
 
-            # Define pricing
-            if self.model_name == "gpt-4o":
-                price_per_million_input_tokens = 5.00
-                price_per_million_output_tokens = 15.00
-            else:
-                return None
+        system_token_count = len(system_tokens)
+        user_token_count = len(user_tokens)
+        assistant_token_count = len(assistant_tokens)
 
-            total_input_tokens = system_token_count + user_token_count + image_token_count
-            input_cost = (total_input_tokens / 1_000_000) * price_per_million_input_tokens
-            output_cost = (assistant_token_count / 1_000_000) * price_per_million_output_tokens
+        # Define pricing
+        if self.model_name == "gpt-4o":
+            price_per_million_input_tokens = 5.00
+            price_per_million_output_tokens = 15.00
+        else:
+            raise NotImplementedError("Pricing not defined for this model.")
 
-            total_cost = input_cost + output_cost
+        total_input_tokens = system_token_count + user_token_count + image_token_count
+        input_cost = (total_input_tokens / 1_000_000) * price_per_million_input_tokens
+        output_cost = (assistant_token_count / 1_000_000) * price_per_million_output_tokens
 
-            return {
-                "system_tokens": system_token_count,
-                "user_tokens": user_token_count,
-                "image_tokens": image_token_count,
-                "total_input_tokens": total_input_tokens,
-                "input_cost": input_cost,
-                "output_tokens": assistant_token_count,
-                "output_cost": output_cost,
-                "total_cost": total_cost
-            }
-        except Exception:
-            return None
+        total_cost = input_cost + output_cost
+
+        output_dict = {
+            "system_tokens": system_token_count,
+            "user_tokens": user_token_count,
+            "image_tokens": image_token_count,
+            "total_input_tokens": total_input_tokens,
+            "input_cost": input_cost,
+            "output_tokens": assistant_token_count,
+            "output_cost": output_cost,
+            "total_cost": total_cost
+        }
+
+        return output_dict
     
     def get_image_dimensions(self, image_path):
         with Image.open(image_path) as img:
