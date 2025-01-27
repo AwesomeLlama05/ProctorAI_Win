@@ -1,20 +1,22 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QTextEdit, QPushButton, QHBoxLayout, QLineEdit
-from PyQt5.QtWidgets import QDialog, QFormLayout, QCheckBox, QSpinBox, QComboBox, QShortcut, QMessageBox
+from PyQt5.QtWidgets import QDialog, QFormLayout, QCheckBox, QSpinBox, QComboBox, QShortcut
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QBrush, QPalette
-from PyQt5.QtCore import QTime, QTimer, Qt, QThread, pyqtSignal
+from PyQt5.QtCore import QTime, QTimer, Qt, QProcess
 from PyQt5.QtGui import QColor, QTextCursor, QTextCharFormat, QKeySequence
+from api_models import *
 import json
 import os
-import time
+from utils import find_virtualenv
 from dotenv import find_dotenv, load_dotenv
-
-# Import AI-related modules
-from api_models import *
-from core import analyze_procrastination, handle_procrastination
 
 dotenv_file = find_dotenv()
 load_dotenv(dotenv_file)
+
+VENV_PATH = os.getenv("PATH_TO_LOCAL_EVN", None)
+
+if not VENV_PATH:
+    VENV_PATH = os.path.join(find_virtualenv(".."), "Scripts", "python.exe")
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -105,28 +107,14 @@ class ProcrastinationApp(QWidget):
     def __init__(self):
         super().__init__()
         self.cur_dir = os.path.dirname(__file__)
+        self.initUI()
         self.start_time = None
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_timer)
+        self.process = None
         self.settings = load_settings()
         self.settings_dialog = SettingsDialog(self)
         self.apply_settings()
-        
-        # Initialize model
-        self.proctor_model = None
-        self.monitoring = False
-        self.monitor_thread = None
-        
-        # Initialize UI after setting up variables
-        self.initUI()
-        
-        # Show warning if AI models are not available
-        if not AI_MODELS_AVAILABLE:
-            QMessageBox.warning(
-                self,
-                "AI Models Unavailable",
-                "AI models are not available. Please install required packages to enable AI functionality."
-            )
 
     def initUI(self):
         self.setWindowTitle('ProctorAI👁️')
@@ -140,7 +128,9 @@ class ProcrastinationApp(QWidget):
         subtitle_1 = 'What behaviors do you want me to allow?'
         subtitle_2 = 'Testing for windows version'
         subtitle_3 = "You've got this"
+        subtitle_4 = "And if you dare to procrastinate, I will make you pay the price ;)"
         self.prompt_label = QLabel(self)
+        # self.prompt_label.setText(
         self.full_text = f"""
             <span style="font-family: Courier New; font-size: 16px; color: #ffffff; font-weight: bold">
                 {pretitle}
@@ -165,7 +155,18 @@ class ProcrastinationApp(QWidget):
             <span style="font-family: Courier New; font-size: 16px; color: #ffffff; font-weight: bold">
                 {subtitle_3}
             </span>
+            <br>
+            <span style="font-family: Courier New; font-size: 16px; color: #ffffff; font-weight: bold">
+                {subtitle_4}
+            </span>
         """
+        self.current_text = ""
+        self.text_index = 0
+        self.parts = self.split_text_into_parts(self.full_text)
+
+        self.typing_timer = QTimer(self)
+        self.typing_timer.timeout.connect(self.update_text)
+
 
         self.prompt_input = QTextEdit(self)
         self.prompt_input.setFont(QFont('Courier New', 16))
@@ -199,6 +200,7 @@ class ProcrastinationApp(QWidget):
                 background-color: #2e2e30;
             }
         """)
+                                        
 
         # Create a shortcut for Command+Enter
         shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
@@ -206,11 +208,14 @@ class ProcrastinationApp(QWidget):
         
         self.settings_button = QPushButton('Settings (Ctrl+S)', self)
         self.settings_button.clicked.connect(self.open_settings)
+        # setting geometry of button
         self.settings_button.setGeometry(200, 150, 100, 100)
+ 
+
         self.settings_button.setStyleSheet("""
             QPushButton {
                 border: 5px solid #4CAF50;
-                border-radius: 50px;
+                border-radius: 50px; /* Half of the button's height/width */
                 background-color: #4CAF50;
                 color: white;
                 font-size: 16px;
@@ -249,6 +254,7 @@ class ProcrastinationApp(QWidget):
         self.output_display = QTextEdit(self)
         self.output_display.setReadOnly(True)
         self.output_display.setFont(QFont('Arial', 16, QFont.Bold, italic=True))
+        # self.output_display.setStyleSheet("background-color: black; color: white;")
         self.output_display.setStyleSheet("""
             QTextEdit {
                 border: 1.5px solid #39FF14;
@@ -324,29 +330,51 @@ class ProcrastinationApp(QWidget):
         self.show()
         self.typing_timer.start(50)
 
+        
     def start_task(self, task_description=None):
-        if not AI_MODELS_AVAILABLE:
-            QMessageBox.warning(
-                self,
-                "AI Models Unavailable",
-                "Cannot start task monitoring without AI models.\n"
-                "Install required packages to enable this functionality."
-            )
-            return
-            
         if not task_description:
             task_description = self.prompt_input.toPlainText()
         if task_description:
+            if self.process:
+                self.process.terminate()
+                self.process.waitForFinished()
+
             self.running_label.setText(f"Task in progress: {task_description}")
-            
-            # Initialize model if not already done
-            if not self.proctor_model:
-                self.proctor_model = create_model(self.settings["model"])
-            
+
+            self.process = QProcess(self)
+            arguments = ["-u", os.path.dirname(__file__)+"/main.py"]
+
+            if self.settings["tts"]:
+                arguments.append("--tts")
+            if self.settings["cli_mode"]:
+                arguments.append("--cli_mode")
+            if self.settings["print_CoT"]:
+                arguments.append("--print_CoT")
+            if self.settings["two_tier"]:
+                arguments.append("--two_tier")
+            arguments.extend([
+                "--model", self.settings["model"],
+                "--voice", self.settings["voice"],
+                "--delay_time", str(self.settings["delay_time"]),
+                "--initial_delay", str(self.settings["initial_delay"]),
+                "--countdown_time", str(self.settings["countdown_time"]),
+                "--user_name", self.settings["user_name"],
+                "--router_model", self.settings["router_model"]
+            ])
+
+            # HERE PATH TO YOUR VENV PYTHON
+            self.process.setProgram(VENV_PATH)
+            self.process.setArguments(arguments)
+            self.process.setProcessChannelMode(QProcess.MergedChannels)
+            self.process.readyReadStandardOutput.connect(self.handle_stdout)
+            self.process.start()
+            self.process.write(task_description.encode())
+            self.process.closeWriteChannel()
+
             if self.start_time is None:
                 self.start_time = QTime.currentTime()
                 self.timer.start(1000)  # Update every second
-            
+
             # Switch to running screen if initial start
             if not self.running_label.isVisible():
                 self.prompt_label.hide()
@@ -358,126 +386,46 @@ class ProcrastinationApp(QWidget):
                 self.output_display.show()
                 self.stop_button.show()
                 self.chat_button.show()
-            
-            # Start monitoring in a QThread
-            self.monitoring = True
-            self.monitor_thread = MonitorThread(task_description, self.settings, self.proctor_model)
-            self.monitor_thread.output_signal.connect(self.log_output)
-            self.monitor_thread.start()
 
-    def log_output(self, output, color="green"):
-        # Use invokeMethod to ensure this runs in the main thread
-        from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
         
-        def do_log():
-            elapsed_time = QTime(0, 0).addSecs(self.start_time.secsTo(QTime.currentTime())).toString('hh:mm:ss')
-            timestamped_output = f"{elapsed_time} - {output}\n"
 
-            cursor = self.output_display.textCursor()
-            cursor.movePosition(QTextCursor.End)
-            
-            format = QTextCharFormat()
-            format.setForeground(QColor(color))
-            
-            cursor.insertText(timestamped_output, format)
-            self.output_display.setTextCursor(cursor)
+    def handle_stdout(self):
+        output = self.process.readAllStandardOutput().data().decode()
+        elapsed_time = QTime(0, 0).addSecs(self.start_time.secsTo(QTime.currentTime())).toString('hh:mm:ss')
+        timestamped_output = f"{elapsed_time} - {output}"
+
+        cursor = self.output_display.textCursor()
+        cursor.movePosition(QTextCursor.End)
         
-        QMetaObject.invokeMethod(self, "do_log", Qt.QueuedConnection)
+        # Apply conditional coloring
+        format = QTextCharFormat()
+        
+        if "procrastinating" in output.lower() and api_name_to_colloquial[self.settings["router_model"]] in output:
+            format.setForeground(QColor("orange"))
+        elif "procrastinating" in output.lower() and api_name_to_colloquial[self.settings["model"]] in output:
+            format.setForeground(QColor("red"))
+        else:
+            format.setForeground(QColor("green"))
+        
+        cursor.insertText(timestamped_output, format)
+        self.output_display.setTextCursor(cursor)
     
-
-    def apply_settings(self):
-        self.settings_dialog.model_name_box.setCurrentText(self.settings["model"])
-        self.settings_dialog.tts_checkbox.setChecked(self.settings["tts"])
-        self.settings_dialog.voice_combobox.setCurrentText(self.settings["voice"])
-        self.settings_dialog.cli_mode_checkbox.setChecked(self.settings["cli_mode"])
-        self.settings_dialog.delay_time_spinbox.setValue(self.settings["delay_time"])
-        self.settings_dialog.initial_delay_spinbox.setValue(self.settings["initial_delay"])
-        self.settings_dialog.countdown_time_spinbox.setValue(self.settings["countdown_time"])
-        self.settings_dialog.user_name_lineedit.setText(self.settings["user_name"])
-        self.settings_dialog.print_CoT_checkbox.setChecked(self.settings["print_CoT"])
-        self.settings_dialog.two_tier_checkbox.setChecked(self.settings["two_tier"])
-        self.settings_dialog.router_model_box.setCurrentText(self.settings["router_model"])
-
-
+        
     def update_timer(self):
-        # Use invokeMethod to ensure this runs in the main thread
-        from PyQt5.QtCore import QMetaObject, Qt
+        if self.start_time:
+            elapsed_time = QTime(0, 0).secsTo(QTime.currentTime()) - QTime(0, 0).secsTo(self.start_time)
+            self.timer_label.setText('Time Elapsed: ' + QTime(0, 0).addSecs(elapsed_time).toString('hh:mm:ss'))
         
-        def do_update():
-            if self.start_time:
-                elapsed_time = QTime(0, 0).secsTo(QTime.currentTime()) - QTime(0, 0).secsTo(self.start_time)
-                self.timer_label.setText('Time Elapsed: ' + QTime(0, 0).addSecs(elapsed_time).toString('hh:mm:ss'))
-        
-        QMetaObject.invokeMethod(self, "do_update", Qt.QueuedConnection)
-        
-class MonitorThread(QThread):
-    output_signal = pyqtSignal(str, str)  # (output_text, color)
-    
-    def __init__(self, task_description, settings, proctor_model):
-        super().__init__()
-        self.task_description = task_description
-        self.settings = settings
-        self.proctor_model = proctor_model
-        self.monitoring = True
-        
-    def run(self):
-        while self.monitoring:
-            try:
-                # Run AI operations
-                determination, image_filepaths = analyze_procrastination(
-                    self.task_description,
-                    model_name=self.settings["model"],
-                    print_CoT=self.settings["print_CoT"],
-                    two_tier=self.settings["two_tier"],
-                    router_model_name=self.settings["router_model"]
-                )
-                
-                # Emit signal to log the determination
-                if "procrastinating" in determination.lower():
-                    if self.settings["two_tier"] and api_name_to_colloquial[self.settings["router_model"]] in determination:
-                        self.output_signal.emit(
-                            f"{api_name_to_colloquial[self.settings['router_model']]} Determination: {determination}",
-                            "orange"
-                        )
-                    else:
-                        self.output_signal.emit(
-                            f"{api_name_to_colloquial[self.settings['model']]} Determination: {determination}",
-                            "red"
-                        )
-                        
-                    # Handle procrastination event
-                    handle_procrastination(
-                        self.task_description,
-                        self.settings["user_name"],
-                        self.proctor_model,
-                        self.settings["tts"],
-                        self.settings["voice"],
-                        self.settings["countdown_time"],
-                        image_filepaths
-                    )
-                else:
-                    self.output_signal.emit(
-                        f"{api_name_to_colloquial[self.settings['model']]} Determination: {determination}",
-                        "green"
-                    )
-                
-                # Sleep for delay time
-                time.sleep(self.settings["delay_time"])
-                
-            except Exception as e:
-                self.output_signal.emit(f"Error: {str(e)}", "red")
-                break
-
     def stop_task(self):
         self.timer.stop()
-        self.monitoring = False
-        if self.monitor_thread:
-            self.monitor_thread.join(timeout=1)
+        if self.process:
+            self.process.terminate()
+            self.process.waitForFinished()
         print("Stopping task")
         self.close()
 
     def resizeEvent(self, event):
-        background_image = QPixmap(os.path.join(os.path.dirname(self.cur_dir), 'assets', 'space_2.jpg'))
+        background_image = QPixmap(os.path.dirname(self.cur_dir)+'/assets/space_3.jpg')  # Replace with your image file
         scaled_background = background_image.scaled(self.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
         
         palette = QPalette()
@@ -508,24 +456,17 @@ class MonitorThread(QThread):
         self.stop_button.show()
         self.chat_button.show()
         
-    def send_message(self):    
+    def send_message(self):
         user_message = self.input_area.toPlainText()
         if user_message:
             self.chat_area.append(f"You: {user_message}")
             self.input_area.clear()
-            
-            if not self.proctor_model:
-                self.proctor_model = create_model(self.settings["model"])
-                
+            model = create_model(self.settings["model"])
             system_prompt = "You are a charismatic productivity assistant chatbot. You give short encouraging responses."
             user_prompt = f"The User just updated their task specification. It is pasted below. Please give a brief response telling them that their task has been updated and a little bit of personalized ecouragement. But no matter what, don't sound cliche.\n\n{user_message}"            
-            ai_message = self.proctor_model.call_model(user_prompt, system_prompt=system_prompt)
+            ai_message = model.call_model(user_prompt, system_prompt=system_prompt)
             self.chat_area.append("ProctorAI: "+ai_message)
-            
-            # Stop current monitoring and start with new task
-            self.monitoring = False
-            if self.monitor_thread:
-                self.monitor_thread.join(timeout=1)
+            # Restart the backend with the user's message as stdin
             self.start_task(user_message)
 
     def apply_settings(self):
@@ -542,6 +483,7 @@ class MonitorThread(QThread):
         self.settings_dialog.router_model_box.setCurrentText(self.settings["router_model"])
 
     def split_text_into_parts(self, text):
+        # For quick dynamic typing of the text on the screen without waiting for tags
         parts = []
         temp = ""
         in_tag = False
@@ -584,8 +526,10 @@ class MonitorThread(QThread):
         else:
             self.typing_timer.stop()
 
+
+
 def load_settings():
-    settings_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "settings.json")
+    settings_file = os.path.dirname(os.path.dirname(__file__)) + "/settings.json"
     if os.path.exists(settings_file):
         with open(settings_file, "r") as file:
             return json.load(file)
@@ -605,28 +549,15 @@ def load_settings():
         }
 
 def save_settings(settings):
-    settings_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "settings.json")
+    settings_file = os.path.dirname(os.path.dirname(__file__)) + "/settings.json"
     with open(settings_file, "w") as file:
         json.dump(settings, file)
 
+
+
 if __name__ == '__main__':
-    # Initialize application with high DPI support
-    import sys
-    from PyQt5.QtCore import Qt
-    from PyQt5.QtWidgets import QApplication
-    import os
-    
-    # Set platform to offscreen
-    os.environ['QT_QPA_PLATFORM'] = 'windows'
-    
-    # Enable high DPI support
-    if hasattr(Qt, 'AA_EnableHighDpiScaling'):
-        QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
-        QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-    
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'icon_rounded.png')))
+    app.setWindowIcon(QIcon(os.path.dirname(os.path.dirname(__file__))+'/assets/icon_rounded.png'))
     app.setApplicationName('ProctorAI👁️')
     ex = ProcrastinationApp()
-    app.exec_()
+    sys.exit(app.exec_())
