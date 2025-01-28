@@ -33,6 +33,8 @@ class ProcrastinationEvent:
             label['text'] = start_count
             if start_count > 0:
                 root.after(1000, countdown, start_count - 1)
+            else:
+                root.destroy()  # Close the window when the countdown reaches zero
 
         countdown(count)
         root.mainloop()
@@ -44,6 +46,7 @@ class FocusPopup:
         self.master.title("Focus Reminder")
         self.master.attributes('-fullscreen', True)
         self.master.configure(bg='white')
+        screen_height = self.master.winfo_screenheight()
 
         # AI personalized message at the top with wrapping
         self.ai_message_label = tk.Label(
@@ -54,7 +57,7 @@ class FocusPopup:
             fg='black',
             wraplength=self.master.winfo_screenwidth() - 100  # Wrap text to fit the screen width with padding
         )
-        self.ai_message_label.pack(pady=50, side=tk.TOP)
+        self.ai_message_label.pack(pady=(screen_height // 4, 50), side=tk.TOP)
 
         
         # Pledge message and entry at the bottom

@@ -1,1 +1,1 @@
-{"model": "gpt-4o", "tts": false, "voice": "Emily", "cli_mode": false, "delay_time": 0, "initial_delay": 0, "countdown_time": 15, "user_name": "Ada", "print_CoT": false, "two_tier": true, "router_model": "llava"}
+{"model": "gpt-4o", "tts": false, "voice": "Emily", "cli_mode": false, "delay_time": 15, "initial_delay": 0, "countdown_time": 15, "user_name": "Ada", "print_CoT": false, "two_tier": true, "router_model": "llava"}

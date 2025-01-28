@@ -28,7 +28,7 @@ def model_pipeline(
     image_filepaths: list,
     print_CoT=False,
 ):
-    print(f"Debug: user_prompt sent to model: {user_prompt}")  # debug
+    # print(f"Debug: user_prompt sent to model: {user_prompt}")  # debug
 
     # goes from model to determination of "productive" or "procrastinating"
     response = model.call_model(
@@ -108,7 +108,7 @@ def procrastination_sequence(
         },
         {
             "role": "countdown",
-            "user_prompt": config["user_prompt_countdown"].format(user_spec=user_spec),
+            "user_prompt": config["user_prompt_countdown"].format(user_spec=user_spec, user_name=user_name),
             "system_prompt": config["system_prompt_countdown"],
             "image_paths": image_filepaths,
         },
@@ -145,6 +145,7 @@ def control_sequence(
     judge_model,
     total_cost,
     user_spec,
+    user_name,
     print_CoT,
     user_prompt_label,
 ):
@@ -152,7 +153,7 @@ def control_sequence(
     determination, total_cost = model_pipeline(
         model,
         judge_model,
-        config[user_prompt_label].format(user_spec=user_spec),
+        config[user_prompt_label].format(user_spec=user_spec,user_name=user_name),
         total_cost,
         image_filepaths,
         print_CoT=print_CoT,
@@ -219,6 +220,7 @@ def main(
             proctor_model,
             total_cost,
             user_spec,
+            user_name,
             print_CoT,
             "user_prompt",
         ]
@@ -231,8 +233,9 @@ def main(
                 proctor_model,
                 total_cost,
                 user_spec,
+                user_name,
                 print_CoT,
-                "user_prompt_strict",
+                "user_prompt",
             )
         elif not two_tier:
             control_sequence(*control_args)

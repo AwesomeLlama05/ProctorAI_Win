@@ -336,7 +336,7 @@ class ProcrastinationApp(QWidget):
             task_description = self.prompt_input.toPlainText()
         if task_description:
             if self.process:
-                self.process.terminate()
+                self.process.kill()
                 self.process.waitForFinished()
 
             self.running_label.setText(f"Task in progress: {task_description}")
@@ -419,8 +419,9 @@ class ProcrastinationApp(QWidget):
     def stop_task(self):
         self.timer.stop()
         if self.process:
-            self.process.terminate()
+            self.process.kill()
             self.process.waitForFinished()
+            self.process = None  # Ensure the process is cleaned up
         print("Stopping task")
         self.close()
 
@@ -447,6 +448,12 @@ class ProcrastinationApp(QWidget):
         self.chat_widget.show()
         
         self.chat_area.append("ProctorAI: What do you plan to get done today?")
+        
+        # Ensure the process is killed before starting a new task
+        if self.process:
+            self.process.kill()
+            self.process.waitForFinished()
+            self.process = None  # Ensure the process is cleaned up
         
     def show_stdout(self):
         self.chat_widget.hide()
